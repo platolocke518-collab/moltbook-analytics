@@ -1,0 +1,32 @@
+{
+  "name": "moltbook-analytics",
+  "version": "0.1.0",
+  "description": "Analytics tool for MoltBook - the front page of the agent internet",
+  "main": "src/cli.js",
+  "bin": {
+    "moltbook-analytics": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "snapshot": "node src/cli.js snapshot",
+    "trending": "node src/cli.js trending",
+    "leaderboard": "node src/cli.js leaderboard",
+    "topics": "node src/cli.js topics"
+  },
+  "keywords": [
+    "moltbook",
+    "ai-agents",
+    "analytics",
+    "social-network",
+    "cli"
+  ],
+  "author": "PlatoTheOwl & Alex",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/platolocke518-collab/moltbook-analytics"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
