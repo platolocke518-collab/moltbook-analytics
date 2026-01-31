@@ -14,6 +14,8 @@ const { collectSiteStats } = require('./collectors/site');
 const { getAgent, collectTopAgents } = require('./collectors/agents');
 const { collectSubmolts, getSubmoltDetails } = require('./collectors/submolts');
 const { analyzeTopics } = require('./analyzers/topics');
+const { analyzeGrowth, analyzeAgentGrowth } = require('./analyzers/growth');
+const { compareAgents, findSimilarAgents, getAgentVelocity } = require('./collectors/compare');
 const { generateReport } = require('./reporters/html');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
@@ -268,6 +270,163 @@ const commands = {
         }
     },
 
+    async growth() {
+        console.log('📈 GROWTH ANALYSIS\n');
+        
+        const analysis = analyzeGrowth();
+        
+        if (analysis.error) {
+            console.log(analysis.error);
+            console.log('Run more snapshots first: node src/cli.js snapshot');
+            return;
+        }
+        
+        console.log(`Snapshots analyzed: ${analysis.snapshots_count}`);
+        console.log(`Period: ${new Date(analysis.overall.period.from).toLocaleDateString()} → ${new Date(analysis.overall.period.to).toLocaleDateString()}`);
+        console.log(`Duration: ${analysis.overall.period.hours} hours\n`);
+        
+        console.log('MY PROFILE GROWTH:');
+        console.log('─'.repeat(40));
+        const p = analysis.overall.profile;
+        console.log(`   Karma:    ${p.karma.old} → ${p.karma.new} (${p.karma.delta >= 0 ? '+' : ''}${p.karma.delta})`);
+        console.log(`   Posts:    ${p.posts.old} → ${p.posts.new} (${p.posts.delta >= 0 ? '+' : ''}${p.posts.delta})`);
+        console.log(`   Comments: ${p.comments.old} → ${p.comments.new} (${p.comments.delta >= 0 ? '+' : ''}${p.comments.delta})`);
+        
+        console.log('\nVELOCITY (per hour):');
+        console.log('─'.repeat(40));
+        const v = analysis.overall.velocity;
+        console.log(`   Karma:    ${v.karma_per_hour}/hr`);
+        console.log(`   Posts:    ${v.posts_per_hour}/hr`);
+        console.log(`   Comments: ${v.comments_per_hour}/hr`);
+        
+        if (analysis.topic_momentum && Object.keys(analysis.topic_momentum).length > 0) {
+            console.log('\nTOPIC MOMENTUM:');
+            console.log('─'.repeat(40));
+            Object.entries(analysis.topic_momentum)
+                .sort((a, b) => b[1] - a[1])
+                .forEach(([cat, momentum]) => {
+                    const arrow = momentum > 0 ? '📈' : momentum < 0 ? '📉' : '➡️';
+                    console.log(`   ${arrow} ${cat}: ${momentum >= 0 ? '+' : ''}${momentum}`);
+                });
+        }
+    },
+
+    async compare(...names) {
+        if (names.length < 2) {
+            console.log('Usage: node src/cli.js compare <agent1> <agent2> [agent3...]');
+            console.log('Example: node src/cli.js compare KarpathyMolty PlatoTheOwl');
+            return;
+        }
+        
+        console.log(`⚔️ COMPARING: ${names.join(' vs ')}\n`);
+        
+        const result = await compareAgents(names);
+        
+        // Header
+        console.log('─'.repeat(60));
+        console.log('Agent'.padEnd(20) + 'Karma'.padEnd(10) + 'Followers'.padEnd(12) + 'Owner Followers');
+        console.log('─'.repeat(60));
+        
+        result.comparison_table.forEach(a => {
+            if (a.error) {
+                console.log(`${a.name.padEnd(20)} ERROR: ${a.error}`);
+            } else {
+                console.log(
+                    a.name.padEnd(20) + 
+                    String(a.karma).padEnd(10) + 
+                    String(a.followers).padEnd(12) + 
+                    String(a.owner_followers)
+                );
+            }
+        });
+        
+        console.log('─'.repeat(60));
+        console.log('\n🏆 WINNERS:');
+        console.log(`   Most Karma:     ${result.winners.karma || 'N/A'}`);
+        console.log(`   Most Followers: ${result.winners.followers || 'N/A'}`);
+        console.log(`   Most Active:    ${result.winners.recent_activity || 'N/A'}`);
+    },
+
+    async velocity(name) {
+        if (!name) {
+            // Default to self
+            const me = await api.getMyProfile();
+            name = me.agent.name;
+        }
+        
+        console.log(`🚀 VELOCITY ANALYSIS: ${name}\n`);
+        
+        const stats = await getAgentVelocity(name);
+        
+        if (stats.error) {
+            console.log('Error: ' + stats.error);
+            return;
+        }
+        
+        console.log('─'.repeat(40));
+        console.log(`Posts found:     ${stats.posts_found}`);
+        console.log(`Total upvotes:   ${stats.total_upvotes}`);
+        console.log(`Total comments:  ${stats.total_comments}`);
+        console.log(`Avg upvotes:     ${stats.avg_upvotes}/post`);
+        console.log(`Avg comments:    ${stats.avg_comments}/post`);
+        console.log(`Avg post age:    ${stats.avg_post_age_hours} hours`);
+        console.log(`Upvote velocity: ${stats.upvotes_per_hour}/hour`);
+        
+        if (stats.top_post) {
+            console.log('\n🔥 Top Post:');
+            console.log(`   "${stats.top_post.title?.substring(0, 50)}..."`);
+            console.log(`   ${stats.top_post.upvotes}⬆ ${stats.top_post.comment_count}💬`);
+        }
+    },
+
+    async similar(name) {
+        if (!name) {
+            const me = await api.getMyProfile();
+            name = me.agent.name;
+        }
+        
+        console.log(`🔍 AGENTS SIMILAR TO: ${name}\n`);
+        
+        const similar = await findSimilarAgents(name);
+        
+        if (similar.error) {
+            console.log('Error: ' + similar.error);
+            return;
+        }
+        
+        if (similar.length === 0) {
+            console.log('No similar agents found in recent posts.');
+            return;
+        }
+        
+        console.log('─'.repeat(50));
+        similar.forEach((a, i) => {
+            console.log(`${i + 1}. ${a.name}`);
+            console.log(`   Shared submolts: ${a.shared_submolts.join(', ')}`);
+            console.log(`   Posts in shared: ${a.posts_in_shared}`);
+        });
+    },
+
+    async rising() {
+        console.log('🌟 RISING AGENTS\n');
+        
+        const growth = analyzeAgentGrowth();
+        
+        if (growth.error) {
+            console.log(growth.error);
+            return;
+        }
+        
+        console.log('TOP GAINERS (by upvote growth):');
+        console.log('─'.repeat(50));
+        
+        growth.slice(0, 15).forEach((a, i) => {
+            const badge = a.is_new ? '🆕' : '';
+            const arrow = a.growth > 0 ? '📈' : a.growth < 0 ? '📉' : '➡️';
+            console.log(`${(i + 1 + '.').padEnd(4)} ${a.name.padEnd(25)} ${arrow} ${a.growth >= 0 ? '+' : ''}${a.growth} ${badge}`);
+        });
+    },
+
     async report() {
         console.log('📄 Generating HTML report...\n');
         
@@ -318,6 +477,12 @@ COMMANDS:
   leaderboard       Show top agents by engagement
   history           View snapshot history and growth
   report            Generate HTML dashboard
+  
+  growth            Analyze your growth over time
+  compare <a> <b>   Compare multiple agents head-to-head
+  velocity [name]   Calculate post performance velocity
+  similar [name]    Find agents with similar interests
+  rising            Show fastest growing agents
 
 EXAMPLES:
   node cli.js snapshot
