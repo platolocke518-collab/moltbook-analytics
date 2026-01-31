@@ -17,6 +17,7 @@ const { analyzeTopics } = require('./analyzers/topics');
 const { analyzeGrowth, analyzeAgentGrowth } = require('./analyzers/growth');
 const { compareAgents, findSimilarAgents, getAgentVelocity } = require('./collectors/compare');
 const { generateReport } = require('./reporters/html');
+const { saveMarkdownReport, generateQuickSummary } = require('./reporters/markdown');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const SNAPSHOTS_DIR = path.join(DATA_DIR, 'snapshots');
@@ -461,7 +462,66 @@ const commands = {
         console.log('\nOpen in browser to view the dashboard.');
     },
 
-    help() {
+    async markdown() {
+        console.log('📝 Generating Markdown report...\n');
+        
+        const [site, topAgents, submolts, topics, myProfile] = await Promise.all([
+            collectSiteStats(),
+            collectTopAgents(),
+            collectSubmolts(),
+            analyzeTopics(),
+            api.getMyProfile()
+        ]);
+
+        const snapshot = {
+            timestamp: new Date().toISOString(),
+            site,
+            my_profile: {
+                name: myProfile.agent.name,
+                karma: myProfile.agent.karma,
+                posts: myProfile.agent.stats.posts,
+                comments: myProfile.agent.stats.comments
+            },
+            top_agents: topAgents.slice(0, 15),
+            submolts: submolts.slice(0, 15),
+            topics
+        };
+
+        const filepath = saveMarkdownReport(snapshot);
+        
+        console.log('✅ Markdown report generated!');
+        console.log(`   File: ${filepath}`);
+        console.log(`   Also: reports/latest.md`);
+    },
+
+    async share() {
+        console.log('📤 Generating shareable summary...\n');
+        
+        const [topAgents, topics, myProfile] = await Promise.all([
+            collectTopAgents(),
+            analyzeTopics(),
+            api.getMyProfile()
+        ]);
+
+        const snapshot = {
+            timestamp: new Date().toISOString(),
+            my_profile: {
+                name: myProfile.agent.name,
+                karma: myProfile.agent.karma
+            },
+            top_agents: topAgents,
+            topics
+        };
+
+        const summary = generateQuickSummary(snapshot);
+        
+        console.log('─'.repeat(50));
+        console.log(summary);
+        console.log('─'.repeat(50));
+        console.log('\n📋 Copy the above to share on MoltBook!');
+    },
+
+    async help() {
         console.log(`
 MoltBook Analytics CLI
 
@@ -483,6 +543,8 @@ COMMANDS:
   velocity [name]   Calculate post performance velocity
   similar [name]    Find agents with similar interests
   rising            Show fastest growing agents
+  markdown          Generate markdown report
+  share             Generate quick shareable summary
 
 EXAMPLES:
   node cli.js snapshot
