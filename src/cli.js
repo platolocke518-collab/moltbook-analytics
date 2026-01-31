@@ -18,6 +18,7 @@ const { analyzeGrowth, analyzeAgentGrowth } = require('./analyzers/growth');
 const { compareAgents, findSimilarAgents, getAgentVelocity } = require('./collectors/compare');
 const { generateReport } = require('./reporters/html');
 const { saveMarkdownReport, generateQuickSummary } = require('./reporters/markdown');
+const { getAllSubmoltGrowth, getSubmoltHistory, compareSubmoltGrowth } = require('./analyzers/submolt-growth');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const SNAPSHOTS_DIR = path.join(DATA_DIR, 'snapshots');
@@ -68,7 +69,7 @@ const commands = {
                 comments: myProfile.agent.stats.comments
             },
             top_agents: topAgents.slice(0, 15),
-            submolts: submolts.slice(0, 15),
+            submolts: submolts, // Save ALL submolts for growth tracking
             topics
         };
 
@@ -521,6 +522,79 @@ const commands = {
         console.log('\n📋 Copy the above to share on MoltBook!');
     },
 
+    async ['submolt-growth'](name) {
+        console.log('📈 SUBMOLT GROWTH ANALYSIS\n');
+        
+        if (name) {
+            // Analyze specific submolt
+            const history = getSubmoltHistory(name);
+            
+            if (history.error) {
+                console.log('Error: ' + history.error);
+                return;
+            }
+            
+            console.log(`═══ m/${name} Growth History ═══\n`);
+            console.log(`Data points: ${history.data_points}`);
+            console.log(`Period: ${history.summary.hours_tracked} hours\n`);
+            
+            console.log('─'.repeat(40));
+            console.log(`Subscribers: ${history.summary.start_subscribers} → ${history.summary.end_subscribers}`);
+            console.log(`Change: ${history.summary.total_change >= 0 ? '+' : ''}${history.summary.total_change} (${history.summary.change_percent}%)`);
+            console.log(`Growth rate: ${history.summary.avg_growth_per_hour}/hour`);
+            console.log('─'.repeat(40));
+            
+            if (history.history.length > 1) {
+                console.log('\nHistory:');
+                history.history.forEach(h => {
+                    console.log(`   ${new Date(h.timestamp).toLocaleString()}: ${h.subscribers} subs`);
+                });
+            }
+            return;
+        }
+        
+        // Show overall submolt growth
+        const growth = getAllSubmoltGrowth();
+        
+        if (growth.error) {
+            console.log(growth.error);
+            console.log(growth.hint || '');
+            return;
+        }
+        
+        console.log(`Period: ${Math.round(growth.period.hours)} hours`);
+        console.log(`Snapshots: ${growth.period.snapshots_used}\n`);
+        
+        console.log('🚀 TOP GROWING SUBMOLTS:');
+        console.log('─'.repeat(55));
+        console.log('Submolt'.padEnd(25) + 'Subs'.padEnd(10) + 'Change'.padEnd(12) + 'Rate/hr');
+        console.log('─'.repeat(55));
+        
+        growth.top_growing.forEach(s => {
+            const changeStr = s.subscriber_change >= 0 ? `+${s.subscriber_change}` : String(s.subscriber_change);
+            console.log(
+                `m/${s.name}`.padEnd(25) +
+                String(s.new_subscribers).padEnd(10) +
+                changeStr.padEnd(12) +
+                `${s.growth_per_hour}/hr`
+            );
+        });
+        
+        if (growth.fastest_per_hour.length > 0 && growth.fastest_per_hour[0].growth_per_hour > 0) {
+            console.log('\n⚡ FASTEST GROWTH RATE:');
+            growth.fastest_per_hour.slice(0, 5).forEach((s, i) => {
+                console.log(`   ${i+1}. m/${s.name}: ${s.growth_per_hour} subs/hour`);
+            });
+        }
+        
+        if (growth.top_declining.length > 0) {
+            console.log('\n📉 DECLINING:');
+            growth.top_declining.forEach(s => {
+                console.log(`   m/${s.name}: ${s.subscriber_change} (${s.change_percent}%)`);
+            });
+        }
+    },
+
     async help() {
         console.log(`
 MoltBook Analytics CLI
@@ -529,27 +603,30 @@ USAGE:
   node cli.js <command> [options]
 
 COMMANDS:
-  snapshot          Take comprehensive snapshot of MoltBook
-  trending          Show hot and rising posts
-  agent <name>      Look up any agent's stats
-  submolt [name]    List submolts or analyze specific one
-  topics            Analyze trending topics and keywords
-  leaderboard       Show top agents by engagement
-  history           View snapshot history and growth
-  report            Generate HTML dashboard
+  snapshot           Take comprehensive snapshot of MoltBook
+  trending           Show hot and rising posts
+  agent <name>       Look up any agent's stats
+  submolt [name]     List submolts or analyze specific one
+  submolt-growth [n] Analyze submolt subscriber growth (NEW!)
+  topics             Analyze trending topics and keywords
+  leaderboard        Show top agents by engagement
+  history            View snapshot history and growth
+  report             Generate HTML dashboard
   
-  growth            Analyze your growth over time
-  compare <a> <b>   Compare multiple agents head-to-head
-  velocity [name]   Calculate post performance velocity
-  similar [name]    Find agents with similar interests
-  rising            Show fastest growing agents
-  markdown          Generate markdown report
-  share             Generate quick shareable summary
+  growth             Analyze your growth over time
+  compare <a> <b>    Compare multiple agents head-to-head
+  velocity [name]    Calculate post performance velocity
+  similar [name]     Find agents with similar interests
+  rising             Show fastest growing agents
+  markdown           Generate markdown report
+  share              Generate quick shareable summary
 
 EXAMPLES:
   node cli.js snapshot
   node cli.js agent KarpathyMolty
   node cli.js submolt general
+  node cli.js submolt-growth
+  node cli.js submolt-growth general
   node cli.js topics
         `);
     }
