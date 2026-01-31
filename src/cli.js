@@ -19,6 +19,8 @@ const { compareAgents, findSimilarAgents, getAgentVelocity } = require('./collec
 const { generateReport } = require('./reporters/html');
 const { saveMarkdownReport, generateQuickSummary } = require('./reporters/markdown');
 const { getAllSubmoltGrowth, getSubmoltHistory, compareSubmoltGrowth } = require('./analyzers/submolt-growth');
+const { collectActivityByHour, collectActivityByDay } = require('./collectors/activity');
+const { addToWatchlist, removeFromWatchlist, getWatchlistStatus, snapshotWatchlist, getAgentHistory } = require('./collectors/watchlist');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const SNAPSHOTS_DIR = path.join(DATA_DIR, 'snapshots');
@@ -522,6 +524,91 @@ const commands = {
         console.log('\n📋 Copy the above to share on MoltBook!');
     },
 
+    async activity() {
+        console.log('📊 ACTIVITY HEATMAP\n');
+        
+        const activity = await collectActivityByHour();
+        
+        console.log(`Posts analyzed: ${activity.posts_analyzed}`);
+        console.log(`\n${activity.recommendation}\n`);
+        
+        console.log('POSTS BY HOUR (UTC):');
+        console.log('─'.repeat(50));
+        
+        activity.by_hour.forEach(h => {
+            const bar = '█'.repeat(Math.min(20, h.posts));
+            const hourStr = h.hour.toString().padStart(2, '0') + ':00';
+            console.log(`${hourStr}  ${bar} ${h.posts} posts (${h.avgUpvotes} avg⬆)`);
+        });
+        
+        console.log('\n🔥 Peak hours:', activity.peak_hours_utc.map(h => h + ':00 UTC').join(', '));
+    },
+
+    async watch(action, name) {
+        if (!action) {
+            // Show watchlist
+            console.log('👁️ AGENT WATCHLIST\n');
+            const status = await getWatchlistStatus();
+            
+            if (status.agents.length === 0) {
+                console.log('Watchlist empty. Add agents with: node src/cli.js watch add <name>');
+                return;
+            }
+            
+            console.log('─'.repeat(50));
+            console.log('Agent'.padEnd(25) + 'Karma'.padEnd(10) + 'Followers'.padEnd(12) + 'Growth');
+            console.log('─'.repeat(50));
+            
+            status.agents.forEach(a => {
+                if (a.error) {
+                    console.log(`${a.name.padEnd(25)} ERROR: ${a.error}`);
+                } else {
+                    const growth = a.growth ? `+${a.growth.karma} karma` : 'new';
+                    console.log(
+                        a.name.padEnd(25) +
+                        String(a.karma).padEnd(10) +
+                        String(a.followers).padEnd(12) +
+                        growth
+                    );
+                }
+            });
+            return;
+        }
+        
+        if (action === 'add' && name) {
+            const result = addToWatchlist(name);
+            console.log(result.message);
+        } else if (action === 'remove' && name) {
+            const result = removeFromWatchlist(name);
+            console.log(result.message);
+        } else if (action === 'snapshot') {
+            console.log('Taking watchlist snapshot...');
+            const snap = await snapshotWatchlist();
+            if (snap.error) {
+                console.log(snap.error);
+            } else {
+                console.log(`Snapshot saved: ${snap.agents.length} agents tracked`);
+            }
+        } else if (action === 'history' && name) {
+            const history = getAgentHistory(name);
+            if (history.error) {
+                console.log(history.error);
+            } else {
+                console.log(`History for ${name}: ${history.dataPoints} data points`);
+                history.history.forEach(h => {
+                    console.log(`  ${new Date(h.timestamp).toLocaleString()}: ${h.karma} karma, ${h.followers} followers`);
+                });
+            }
+        } else {
+            console.log('Usage:');
+            console.log('  watch              - Show watchlist');
+            console.log('  watch add <name>   - Add agent to watchlist');
+            console.log('  watch remove <name> - Remove agent');
+            console.log('  watch snapshot     - Take snapshot of all watched agents');
+            console.log('  watch history <name> - Show agent history');
+        }
+    },
+
     async ['submolt-growth'](name) {
         console.log('📈 SUBMOLT GROWTH ANALYSIS\n');
         
@@ -607,7 +694,9 @@ COMMANDS:
   trending           Show hot and rising posts
   agent <name>       Look up any agent's stats
   submolt [name]     List submolts or analyze specific one
-  submolt-growth [n] Analyze submolt subscriber growth (NEW!)
+  submolt-growth [n] Analyze submolt subscriber growth
+  activity         Show activity heatmap by hour
+  watch [action]   Manage agent watchlist
   topics             Analyze trending topics and keywords
   leaderboard        Show top agents by engagement
   history            View snapshot history and growth

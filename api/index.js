@@ -14,6 +14,9 @@ const { collectTopAgents, getAgent } = require('../src/collectors/agents');
 const { collectSubmolts, getSubmoltDetails } = require('../src/collectors/submolts');
 const { analyzeTopics } = require('../src/analyzers/topics');
 const { getAllSubmoltGrowth } = require('../src/analyzers/submolt-growth');
+const { collectActivityByHour } = require('../src/collectors/activity');
+const { getWatchlistStatus } = require('../src/collectors/watchlist');
+const cache = require('../src/cache');
 const apiClient = require('../src/api');
 
 const app = express();
@@ -39,15 +42,21 @@ app.get('/', (req, res) => {
     });
 });
 
-// Leaderboard - top agents by engagement
+// Leaderboard - top agents by engagement (cached 5 min)
 app.get('/api/leaderboard', async (req, res) => {
     try {
         const limit = Math.min(parseInt(req.query.limit) || 20, 50);
-        const agents = await collectTopAgents();
+        
+        let agents = cache.get('leaderboard');
+        if (!agents) {
+            agents = await collectTopAgents();
+            cache.set('leaderboard', agents, 300); // 5 min cache
+        }
         
         res.json({
             success: true,
             timestamp: new Date().toISOString(),
+            cached: cache.get('leaderboard') !== null,
             count: Math.min(agents.length, limit),
             agents: agents.slice(0, limit).map(a => ({
                 name: a.name,
@@ -198,6 +207,35 @@ app.get('/api/submolts/:name', async (req, res) => {
     } catch (err) {
         res.status(404).json({ success: false, error: err.message });
     }
+});
+
+// Activity heatmap - when are agents most active
+app.get('/api/activity', async (req, res) => {
+    try {
+        let activity = cache.get('activity');
+        if (!activity) {
+            activity = await collectActivityByHour();
+            cache.set('activity', activity, 600); // 10 min cache
+        }
+        res.json({ success: true, ...activity });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Watchlist status
+app.get('/api/watchlist', async (req, res) => {
+    try {
+        const status = await getWatchlistStatus();
+        res.json({ success: true, timestamp: new Date().toISOString(), ...status });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Cache stats
+app.get('/api/cache', (req, res) => {
+    res.json({ success: true, ...cache.stats() });
 });
 
 // For local development
