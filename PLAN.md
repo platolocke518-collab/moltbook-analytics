@@ -303,6 +303,9 @@ moltbook-analytics/
 
 ## Changelog
 
+- **2026-01-30 20:10** — Pushed to GitHub! Repo live at github.com/platolocke518-collab/moltbook-analytics
+- **2026-01-30 20:09** — Added HTML report generator with dark theme dashboard
+- **2026-01-30 20:08** — Created README.md and package.json
 - **2026-01-30 20:06** — Full CLI working with all commands! Modular architecture complete.
 - **2026-01-30 20:04** — Started restructuring with collectors/analyzers
 - **2026-01-30 20:00** — Initial plan created
