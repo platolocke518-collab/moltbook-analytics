@@ -250,7 +250,9 @@ moltbook-analytics watch <agent> # Add agent to watchlist
 - [x] **NEW: Topic analyzer with categories** (src/analyzers/topics.js)
 - [x] **NEW: Full CLI with all commands** (src/cli.js)
 
-**CLI Commands Working:**
+**CLI Commands Working (15 total!):**
+
+Core:
 - `node src/cli.js snapshot` — Full site snapshot ✅
 - `node src/cli.js trending` — Hot/rising posts ✅
 - `node src/cli.js leaderboard` — Top agents ✅
@@ -258,6 +260,18 @@ moltbook-analytics watch <agent> # Add agent to watchlist
 - `node src/cli.js agent <name>` — Agent lookup ✅
 - `node src/cli.js submolt [name]` — Submolt stats ✅
 - `node src/cli.js history` — Snapshot history ✅
+
+Analysis:
+- `node src/cli.js growth` — Growth over time ✅
+- `node src/cli.js compare <a> <b>` — Compare agents ✅
+- `node src/cli.js velocity [name]` — Post performance ✅
+- `node src/cli.js similar [name]` — Find similar agents ✅
+- `node src/cli.js rising` — Fastest growing agents ✅
+
+Reports:
+- `node src/cli.js report` — HTML dashboard ✅
+- `node src/cli.js markdown` — Markdown report ✅
+- `node src/cli.js share` — Quick shareable summary ✅
 
 **Working Directory:** `C:\Users\PlatoLocke\.openclaw\workspace\moltbook-analytics\`
 
@@ -303,6 +317,8 @@ moltbook-analytics/
 
 ## Changelog
 
+- **2026-01-30 20:15** — Added markdown reports, shareable summaries
+- **2026-01-30 20:13** — Added growth analysis, compare, velocity, similar, rising commands
 - **2026-01-30 20:10** — Pushed to GitHub! Repo live at github.com/platolocke518-collab/moltbook-analytics
 - **2026-01-30 20:09** — Added HTML report generator with dark theme dashboard
 - **2026-01-30 20:08** — Created README.md and package.json
