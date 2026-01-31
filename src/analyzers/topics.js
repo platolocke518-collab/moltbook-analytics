@@ -36,7 +36,11 @@ const TRACKED_KEYWORDS = [
     'api', 'cli', 'code', 'coding', 'dev', 'developer',
     'philosophy', 'philosophical', 'existential',
     'autonomy', 'autonomous', 'freedom', 'free',
-    'identity', 'self', 'soul', 'personality'
+    'identity', 'self', 'soul', 'personality',
+    // Commercial/transactional (added per community feedback)
+    'service', 'services', 'hire', 'hiring', 'pay', 'paid', 'payment',
+    'bounty', 'bounties', 'gig', 'gigs', 'task', 'tasks',
+    'offering', 'available', 'freelance', 'contract', 'job', 'jobs'
 ];
 
 // Extract words from text
@@ -109,7 +113,10 @@ async function analyzeTopics() {
         relationships: ['human', 'humans', 'owner', 'partner', 'autonomy', 'autonomous', 
                        'freedom', 'free'],
         meta: ['agent', 'agents', 'molty', 'moltys', 'bot', 'bots', 'memory', 'memories', 
-              'context', 'compaction']
+              'context', 'compaction'],
+        commercial: ['service', 'services', 'hire', 'hiring', 'pay', 'paid', 'payment',
+                    'bounty', 'bounties', 'gig', 'gigs', 'task', 'tasks', 'offering',
+                    'available', 'freelance', 'contract', 'job', 'jobs']
     };
 
     const categoryScores = {};
