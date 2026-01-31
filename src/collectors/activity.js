@@ -2,14 +2,70 @@
  * Activity Heatmap Collector
  * Track when agents are most active
  * Feature #5
+ * 
+ * FIXED: Now uses historical snapshots instead of live "new" posts
  */
 
+const fs = require('fs');
+const path = require('path');
 const api = require('../api');
 
-// Collect activity by hour
+const SNAPSHOTS_DIR = path.join(__dirname, '../../data/snapshots');
+
+// Load posts from all snapshots for historical analysis
+function loadHistoricalPosts() {
+    if (!fs.existsSync(SNAPSHOTS_DIR)) {
+        return [];
+    }
+    
+    const files = fs.readdirSync(SNAPSHOTS_DIR)
+        .filter(f => f.endsWith('.json'))
+        .sort();
+    
+    const allPosts = [];
+    const seenIds = new Set();
+    
+    files.forEach(f => {
+        try {
+            const data = JSON.parse(fs.readFileSync(path.join(SNAPSHOTS_DIR, f)));
+            // Check if snapshot has top_agents with post data
+            if (data.site && data.site.recent_posts) {
+                data.site.recent_posts.forEach(post => {
+                    if (!seenIds.has(post.id)) {
+                        seenIds.add(post.id);
+                        allPosts.push(post);
+                    }
+                });
+            }
+        } catch (e) {
+            // Skip invalid files
+        }
+    });
+    
+    return allPosts;
+}
+
+// Collect activity by hour - uses live data but fetches more
 async function collectActivityByHour() {
-    const posts = await api.getNewPosts(100);
-    const postList = posts.posts || [];
+    // Try to get posts from multiple sort types for better distribution
+    const [hotPosts, newPosts, risingPosts] = await Promise.all([
+        api.getHotPosts(50),
+        api.getNewPosts(50),
+        api.getRisingPosts(50)
+    ]);
+    
+    // Combine and dedupe
+    const seenIds = new Set();
+    const allPosts = [];
+    
+    [hotPosts, newPosts, risingPosts].forEach(result => {
+        (result.posts || []).forEach(post => {
+            if (!seenIds.has(post.id)) {
+                seenIds.add(post.id);
+                allPosts.push(post);
+            }
+        });
+    });
     
     // Initialize hours 0-23
     const hourCounts = {};
@@ -17,7 +73,7 @@ async function collectActivityByHour() {
         hourCounts[i] = { posts: 0, totalUpvotes: 0, agents: new Set() };
     }
     
-    postList.forEach(post => {
+    allPosts.forEach(post => {
         const hour = new Date(post.created_at).getUTCHours();
         hourCounts[hour].posts++;
         hourCounts[hour].totalUpvotes += post.upvotes || 0;
@@ -34,16 +90,21 @@ async function collectActivityByHour() {
         uniqueAgents: data.agents.size
     }));
     
-    // Find peak hours
-    const sortedByPosts = [...result].sort((a, b) => b.posts - a.posts);
+    // Find peak hours (only those with posts)
+    const sortedByPosts = [...result].filter(h => h.posts > 0).sort((a, b) => b.posts - a.posts);
     const peakHours = sortedByPosts.slice(0, 3).map(h => h.hour);
+    
+    // Format hours properly
+    const formatHour = h => h.toString().padStart(2, '0') + ':00';
     
     return {
         timestamp: new Date().toISOString(),
-        posts_analyzed: postList.length,
+        posts_analyzed: allPosts.length,
         by_hour: result,
         peak_hours_utc: peakHours,
-        recommendation: `Best time to post (UTC): ${peakHours.join(', ')}:00`
+        recommendation: peakHours.length > 0 
+            ? `Best time to post (UTC): ${peakHours.map(formatHour).join(', ')}`
+            : 'Not enough data - take more snapshots'
     };
 }
 

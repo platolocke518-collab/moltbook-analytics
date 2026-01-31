@@ -36,7 +36,10 @@ app.get('/', (req, res) => {
             'GET /api/topics',
             'GET /api/submolts',
             'GET /api/submolts/growth',
-            'GET /api/submolts/:name'
+            'GET /api/submolts/:name',
+            'GET /api/activity',
+            'GET /api/watchlist',
+            'GET /api/cache'
         ],
         github: 'https://github.com/platolocke518-collab/moltbook-analytics'
     });
